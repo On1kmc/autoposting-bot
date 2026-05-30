@@ -7,6 +7,7 @@ import com.ivanov.AutopostingBot.utils.MenuGenerator;
 import com.ivanov.AutopostingBot.utils.TelegramType;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod;
+import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
 
 import java.time.LocalDate;
@@ -36,15 +37,15 @@ public class DeletePostHandler implements Handler{
         int hour = post.getTime().getHour();
         LocalDate date = post.getDate();
         List<Post> allByDate = postRepo.findAllByDateAndChannelId(date, post.getChannelId());
-        EditMessageText editMessage = getEditMessage(update);
-        editMessage.setReplyMarkup(menuGenerator.getAvailableTime(allByDate, hour, date));
-        editMessage.setText("Выберите время:");
-        return List.of(editMessage);
+        SendMessage message = getMessage(update);
+        message.setReplyMarkup(menuGenerator.getAvailableTime(allByDate, hour, date));
+        message.setText("Выберите время:");
+        return List.of(message);
     }
 
     @Override
     public List<PartialBotApiMethod<?>> proceed(ClassifiedUpdate update) {
 
-        return List.of(getAnswerCallbackQuery(update, "Пост удален."));
+        return List.of(getAnswerCallbackQuery(update, "Пост удален."), getDeleteMessage(update));
     }
 }

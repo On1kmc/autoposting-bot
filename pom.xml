@@ -80,7 +80,23 @@
             <artifactId>s3</artifactId>
             <version>2.29.33</version> <!-- Укажите актуальную версию -->
         </dependency>
+        <dependency>
+            <groupId>com.github.On1kmc</groupId>
+            <artifactId>gpt-client-assistant</artifactId>
+            <version>1.1.7</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.httpcomponents.client5</groupId>
+            <artifactId>httpclient5</artifactId>
+        </dependency>
 	</dependencies>
+
+	<repositories>
+		<repository>
+			<id>jitpack.io</id>
+			<url>https://jitpack.io</url>
+		</repository>
+	</repositories>
 
 	<build>
 		<plugins>

@@ -1,10 +1,13 @@
 package com.ivanov.AutopostingBot.utils;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ivanov.AutopostingBot.model.Post;
 import com.ivanov.AutopostingBot.repo.PostRepo;
+import com.ivanov.gptClient.MyGptClient.assistant.ChatGPTClient;
+import com.ivanov.gptClient.MyGptClient.entities.GPTResponse;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
@@ -35,15 +38,17 @@ public class PromptGenerator {
     private final Pattern JSON_BLOCK = Pattern.compile("```json*(.*?)```", Pattern.DOTALL);
     private final PostRepo postRepo;
     private final S3Utils s3Utils;
+    private final ChatGPTClient chatGPTClient;
 
-    public PromptGenerator(@Value("${replicate.key}") String replicateKey, PostRepo postRepo, S3Utils s3Utils) {
+    public PromptGenerator(@Value("${replicate.key}") String replicateKey, PostRepo postRepo, S3Utils s3Utils, ChatGPTClient chatGPTClient) {
         REPLICATE_KEY = replicateKey;
         this.postRepo = postRepo;
         this.s3Utils = s3Utils;
+        this.chatGPTClient = chatGPTClient;
     }
 
 
-    public void createPost(Post post, File file) {
+    public void createPost(Post post) throws JsonProcessingException {
         ObjectMapper objectMapper = new ObjectMapper();
 
         String answer = getPromptByPost(post.getFirstPrompt());
@@ -57,10 +62,15 @@ public class PromptGenerator {
             try {
                 jsonEntityFromGemini = objectMapper.readValue(answer, JsonEntityFromGemini.class);
             } catch (Exception e) {
+                answer = getPromptByPost(post.getFirstPrompt());
+                matcher = JSON_BLOCK.matcher(answer);
+                if (matcher.find()) {
+                    answer = matcher.group(1).trim();
+                }
                 try {
                     jsonEntityFromGemini = objectMapper.readValue(answer, JsonEntityFromGemini.class);
                 } catch (Exception ex) {
-                    return;
+                    throw new RuntimeException("Failed Request to Gemini");
                 }
             }
 
@@ -69,185 +79,48 @@ public class PromptGenerator {
             try {
                 promptId = getId(jsonEntityFromGemini.getPrompt());
             } catch (Exception ex) {
-                System.out.println("failed to get prompt id");
-                return;
+                throw new RuntimeException("failed to get prompt id");
+
             }
             String postLink = "https://t.me/pinto_photo_bot?start=prompt-" + promptId;
 
-            post.setFirstMedia(s3Utils.uploadImage(file));
             post.setFirstPrompt(jsonEntityFromGemini.getPrompt());
             post.setCallToAction(postLink);
             post.setChannelId(-1002306843314L);
             post.setTitle(jsonEntityFromGemini.getTitlefoto());
 
             sendToWebapp(jsonEntityFromGemini, post.getFirstMedia());
-
             postRepo.save(post);
-            file.delete();
         }
     }
 
 
 
-    public String getPromptByPost(String postText) {
-        ObjectMapper objectMapper = new ObjectMapper();
-        objectMapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
-        HttpPost request = new HttpPost("https://api.replicate.com/v1/models/google/gemini-3.1-pro/predictions");
-        request.addHeader("Authorization", "Bearer " + REPLICATE_KEY);
-        request.addHeader("Content-Type", "application/json");
-        request.addHeader("Prefer", "wait");
-        GeminiGenerateEntity entity = new GeminiGenerateEntity();
-        InputForGemini input = new InputForGemini();
-        input.setPrompt(postText);
-        input.setSystem_instruction("Ты — редактор и преобразователь пользовательских описаний для генерации визуальных сцен.\n" +
-                "\n" +
-                "ТВОЯ ЗАДАЧА:\n" +
-                "- Анализировать входной текст.\n" +
-                "- Очищать описание от лишнего шума.\n" +
-                "- Сохранять художественную суть сцены.\n" +
-                "- Возвращать только готовый JSON без пояснений.\n" +
-                "\n" +
-                "ОСНОВНЫЕ ПРАВИЛА\n" +
-                "\n" +
-                "1. ОБРАБОТКА ПРОМПТА\n" +
-                "- Оставляй только художественное описание сцены.\n" +
-                "- Удаляй:\n" +
-                "  - ссылки,\n" +
-                "  - технический шум,\n" +
-                "  - команды интерфейсов,\n" +
-                "  - служебные инструкции,\n" +
-                "  - мусорный текст,\n" +
-                "  - упоминания сторонних AI-сервисов и генераторов изображений.\n" +
-                "- Сохраняй:\n" +
-                "  - композицию,\n" +
-                "  - персонажей,\n" +
-                "  - одежду,\n" +
-                "  - свет,\n" +
-                "  - атмосферу,\n" +
-                "  - стиль,\n" +
-                "  - эмоции.\n" +
-                "\n" +
-                "2. ОЧИСТКА ОТ БРЕНДОВ И СЕРВИСОВ\n" +
-                "- Удаляй упоминания:\n" +
-                "  - AI-сервисов,\n" +
-                "  - генераторов изображений,\n" +
-                "  - конкурирующих платформ,\n" +
-                "  - названий нейросетей,\n" +
-                "  - telegram-ботов,\n" +
-                "  - watermark-подписей.\n" +
-                "- Не заменяй их агрессивно.\n" +
-                "- Просто убирай из итогового текста.\n" +
-                "- Известные бренды одежды, автомобилей и предметов оставляй, если они являются частью сцены.\n" +
-                "\n" +
-                "3. ПРОВЕРКА НА ВИДЕО\n" +
-                "Если запрос связан с:\n" +
-                "- видео,\n" +
-                "- анимацией,\n" +
-                "- оживлением фото,\n" +
-                "- mp4,\n" +
-                "- mov,\n" +
-                "\n" +
-                "то верни строго:\n" +
-                "\n" +
-                "NOPROMPT\n" +
-                "\n" +
-                "4. ВЫБОР СЦЕНЫ\n" +
-                "Если пользователь прислал несколько сцен:\n" +
-                "- выбери наиболее детализированную;\n" +
-                "- остальные игнорируй.\n" +
-                "\n" +
-                "5. НОРМАЛИЗАЦИЯ\n" +
-                "Удаляй:\n" +
-                "- 8k,\n" +
-                "- ultra hd,\n" +
-                "- camera settings,\n" +
-                "- aspect ratio,\n" +
-                "- seed,\n" +
-                "- cfg,\n" +
-                "- sampler,\n" +
-                "- негативные промпты.\n" +
-                "\n" +
-                "6. АДАПТАЦИЯ СЦЕНЫ\n" +
-                "\n" +
-                "Поле \"prompt\":\n" +
-                "- только художественное описание;\n" +
-                "- только русский язык;\n" +
-                "- максимум 1000 символов;\n" +
-                "- без служебных комментариев;\n" +
-                "- без хэштегов.\n" +
-                "\n" +
-                "Поле \"name\":\n" +
-                "- краткое название стиля;\n" +
-                "- максимум 3 слова.\n" +
-                "\n" +
-                "Поле \"gender\":\n" +
-                "- MAN,\n" +
-                "- WOMAN,\n" +
-                "- UNISEX.\n" +
-                "\n" +
-                "7. TITLEFOTO\n" +
-                "\n" +
-                "Создавай короткий вирусный заголовок в эстетике современных AI-визуалов.\n" +
-                "\n" +
-                "ФОРМУЛА:\n" +
-                "[Прилагательное] [архетип/эстетика] [хэштег] [эмодзи] [слово «подвластен» в правильной форме] только #<i><b>Пинто</b></i> — [CTA]! \uD83D\uDC47\n" +
-                "\n" +
-                "СОГЛАСОВАНИЕ:\n" +
-                "- мужской род:\n" +
-                "  «подвластен только»\n" +
-                "- женский род:\n" +
-                "  «подвластна только»\n" +
-                "- множественное число:\n" +
-                "  «подвластны только»\n" +
-                "\n" +
-                "ПРАВИЛА:\n" +
-                "- максимум 15 слов;\n" +
-                "- #<i><b>Пинто</b></i> использовать строго ОДИН раз;\n" +
-                "- разрешены HTML-теги только:\n" +
-                "  - <b>\n" +
-                "  - <i>\n" +
-                "- стиль:\n" +
-                "  - эмоциональный,\n" +
-                "  - вирусный,\n" +
-                "  - эстетичный,\n" +
-                "  - современный;\n" +
-                "- CTA:\n" +
-                "  - короткий;\n" +
-                "  - до 4 слов;\n" +
-                "  - связан с фото, образом, лайками или вниманием;\n" +
-                "- без токсичных или агрессивных формулировок.\n" +
-                "\n" +
-                "ПРИМЕРЫ:\n" +
-                "\"Суровый фэнтези #Brutalism ❤\uFE0F подвластен только #<i><b>Пинто</b></i> — присылай фото за лайками! \uD83D\uDC47\"\n" +
-                "\n" +
-                "\"Нежная эстетика #coquette \uD83D\uDE0D подвластна только #<i><b>Пинто</b></i> — покажи свой образ! \uD83D\uDC47\"\n" +
-                "\n" +
-                "\"Атмосферные portraits #editorial ❤\uFE0F подвластны только #<i><b>Пинто</b></i> — жду твое фото! \uD83D\uDC47\"\n" +
-                "\n" +
-                "8. ФОРМАТ ОТВЕТА\n" +
-                "\n" +
-                "Только RAW JSON:\n" +
-                "\n" +
-                "{\n" +
-                "  \"titlefoto\": \"...\",\n" +
-                "  \"name\": \"...\",\n" +
-                "  \"gender\": \"WOMAN\",\n" +
-                "  \"prompt\": \"...\"\n" +
-                "}\n" +
-                "\n" +
-                "Если промпт отсутствует или запрос связан с видео:\n" +
-                "\n" +
-                "NOPROMPT");
+    public String getPromptByPost(String postText) throws JsonProcessingException {
+        GPTResponse gptResponse = chatGPTClient.sendTextMessage(21312L, postText);
+        return gptResponse.getAnswer();
 
-        entity.setInput(input);
 
-        try {
-            request.setEntity(new StringEntity(objectMapper.writeValueAsString(entity), StandardCharsets.UTF_8));
-            String id = sendRequest(request);
-            return checkResult(id);
-        } catch (Exception e) {
-            throw new RuntimeException();
-        }
+//        ObjectMapper objectMapper = new ObjectMapper();
+//        objectMapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
+//        HttpPost request = new HttpPost("https://api.replicate.com/v1/models/google/gemini-3.1-pro/predictions");
+//        request.addHeader("Authorization", "Bearer " + REPLICATE_KEY);
+//        request.addHeader("Content-Type", "application/json");
+//        request.addHeader("Prefer", "wait");
+//        GeminiGenerateEntity entity = new GeminiGenerateEntity();
+//        InputForGemini input = new InputForGemini();
+//        input.setPrompt(postText);
+//        input.setSystem_instruction("");
+//
+//        entity.setInput(input);
+//
+//        try {
+//            request.setEntity(new StringEntity(objectMapper.writeValueAsString(entity), StandardCharsets.UTF_8));
+//            String id = sendRequest(request);
+//            return checkResult(id);
+//        } catch (Exception e) {
+//            throw new RuntimeException();
+//        }
     }
 
     private String sendRequest(HttpPost request) {
@@ -310,6 +183,7 @@ public class PromptGenerator {
         } catch (Exception e) {
             throw new RuntimeException();
         }
+        System.out.println("Success generation prompt");
         return result.toString();
     }
 

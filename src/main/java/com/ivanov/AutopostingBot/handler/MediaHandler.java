@@ -32,19 +32,33 @@ public class MediaHandler implements Handler {
 
     @Override
     public List<PartialBotApiMethod<?>> getAnswer(ClassifiedUpdate update) {
-     return List.of();
+        Post post = postUtils.getPosts().get(update.getUserId());
+        post.setFirstMedia(s3Utils.uploadImage(update.getFile()));
+        update.getFile().delete();
+
+        SendMessage message = getMessage(update);
+        try {
+            promptGenerator.createPost(post);
+
+            message.setText("Пост добавлен.");
+            message.setReplyMarkup(menuGenerator.getNewPostMenu(post.getTime().getHour()));
+
+
+        } catch (Exception ex) {
+            System.out.println("Ошибка добавления поста: " + ex.getMessage());
+
+            message.setText("Ошибка. Пост не добавлен.");
+            message.setReplyMarkup(menuGenerator.getNewPostMenu(post.getTime().getHour()));
+        }
+        return List.of(message);
     }
 
     @Override
     public List<PartialBotApiMethod<?>> proceed(ClassifiedUpdate update) {
         removeState(update);
-        Post post = postUtils.getPosts().get(update.getUserId());
         update.setBad(true);
         SendMessage message = getMessage(update);
-        message.setText("Пост генерируется... скоро он появится в расписании.");
-        message.setReplyMarkup(menuGenerator.getNewPostMenu(post.getTime().getHour()));
-
-        CompletableFuture.runAsync(() -> promptGenerator.createPost(post, update.getFile()));
+        message.setText("Пост генерируется... пожалуйста подождите...");
         return List.of(message);
     }
 }

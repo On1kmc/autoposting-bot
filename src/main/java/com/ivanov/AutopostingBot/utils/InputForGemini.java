@@ -9,6 +9,5 @@ public class InputForGemini {
 
     private String system_instruction;
     private String prompt;
-    private String thinking_level = "low";
-    private String[] images;
+    private String thinking_level = "high";
 }
