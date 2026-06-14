@@ -39,12 +39,35 @@ public class PromptGenerator {
     private final PostRepo postRepo;
     private final S3Utils s3Utils;
     private final ChatGPTClient chatGPTClient;
+    private final String pintoAPIToken;
+    private final long ideasChannelId;
+    private final String pintoBotLink;
+    private final String pintoPromptsUrl;
+    private final String webappApiUrl;
+    private final String webappUser;
+    private final String webappPassword;
 
-    public PromptGenerator(@Value("${replicate.key}") String replicateKey, PostRepo postRepo, S3Utils s3Utils, ChatGPTClient chatGPTClient) {
+    public PromptGenerator(@Value("${replicate.key}") String replicateKey,
+                           PostRepo postRepo, S3Utils s3Utils,
+                           ChatGPTClient chatGPTClient,
+                           @Value("${pinto.api.token}") String pintoAPIToken,
+                           @Value("${channel.ideas.id}") long ideasChannelId,
+                           @Value("${pinto.bot.link}") String pintoBotLink,
+                           @Value("${pinto.api.prompts.url}") String pintoPromptsUrl,
+                           @Value("${webapp.api.url}") String webappApiUrl,
+                           @Value("${webapp.api.username}") String webappUser,
+                           @Value("${webapp.api.password}") String webappPassword) {
         REPLICATE_KEY = replicateKey;
         this.postRepo = postRepo;
         this.s3Utils = s3Utils;
         this.chatGPTClient = chatGPTClient;
+        this.pintoAPIToken = pintoAPIToken;
+        this.ideasChannelId = ideasChannelId;
+        this.pintoBotLink = pintoBotLink;
+        this.pintoPromptsUrl = pintoPromptsUrl;
+        this.webappApiUrl = webappApiUrl;
+        this.webappUser = webappUser;
+        this.webappPassword = webappPassword;
     }
 
 
@@ -82,11 +105,11 @@ public class PromptGenerator {
                 throw new RuntimeException("failed to get prompt id");
 
             }
-            String postLink = "https://t.me/pinto_photo_bot?start=prompt-" + promptId;
+            String postLink = pintoBotLink + promptId;
 
             post.setFirstPrompt(jsonEntityFromGemini.getPrompt());
             post.setCallToAction(postLink);
-            post.setChannelId(-1002306843314L);
+            post.setChannelId(ideasChannelId);
             post.setTitle(jsonEntityFromGemini.getTitlefoto());
 
             sendToWebapp(jsonEntityFromGemini, post.getFirstMedia());
@@ -188,14 +211,13 @@ public class PromptGenerator {
     }
 
     private String getId(String prompt) throws IOException {
-        String url = "https://pintosssivchik.ru:8443/prompts/add";
+        String url = pintoPromptsUrl;
 
         CloseableHttpClient client = HttpClients.createDefault();
 
         HttpPost request = new HttpPost(url);
 
-        String TOKEN = "2qgYdrf4q5J!zaaMn=Fe4jtFdwdfqqa6HgFasORA!0aROV9v2VCT!tB9MVp2wol";
-        request.setHeader("Authorization", TOKEN);
+        request.setHeader("Authorization", pintoAPIToken);
         request.setHeader("Content-Type", "text/plain");
 
         StringEntity entity = new StringEntity(prompt, StandardCharsets.UTF_8);
@@ -216,9 +238,9 @@ public class PromptGenerator {
     }
 
     private void sendToWebapp(JsonEntityFromGemini jsonEntityFromGemini, String link) {
-        String url = "https://pintowebapp.ru/admin/api/styles/by-url";
+        String url = webappApiUrl;
         String basic = Base64.getEncoder().encodeToString(
-                ("admin:8Dp8H075kbcO").getBytes(StandardCharsets.UTF_8));
+                (webappUser + ":" + webappPassword).getBytes(StandardCharsets.UTF_8));
 
         ObjectMapper objectMapper = new ObjectMapper();
         PintoStyleWebAppEntity pintoStyleWebAppEntity = new PintoStyleWebAppEntity();

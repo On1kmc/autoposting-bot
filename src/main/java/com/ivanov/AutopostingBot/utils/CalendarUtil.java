@@ -2,6 +2,7 @@ package com.ivanov.AutopostingBot.utils;
 
 
 import org.joda.time.LocalDate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
@@ -16,6 +17,15 @@ public class CalendarUtil { // Метод для клавиатуры с выб�
     public static final String IGNORE = "ignore!@#$%^&";
 
     public static final String[] WD = {"Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"};
+
+    private final long ideasChannelId;
+    private final long businessChannelId;
+
+    public CalendarUtil(@Value("${channel.ideas.id}") long ideasChannelId,
+                        @Value("${channel.business.id}") long businessChannelId) {
+        this.ideasChannelId = ideasChannelId;
+        this.businessChannelId = businessChannelId;
+    }
 
     public InlineKeyboardMarkup generateKeyboard(LocalDate date, String callback, long channelId) {
 
@@ -53,8 +63,8 @@ public class CalendarUtil { // Метод для клавиатуры с выб�
         }
 
         List<InlineKeyboardButton> line2 = new ArrayList<>();
-        line2.add(createButton("CHANNEL -1002306843314", channelId == -1002306843314L ? "✅ Идеи" : "Идеи"));
-        line2.add(createButton("CHANNEL -1002455361234", channelId == -1002455361234L ? "✅ Бизнес" : "Бизнес"));
+        line2.add(createButton("CHANNEL " + ideasChannelId, channelId == ideasChannelId ? "✅ Идеи" : "Идеи"));
+        line2.add(createButton("CHANNEL " + businessChannelId, channelId == businessChannelId ? "✅ Бизнес" : "Бизнес"));
         keyboard.add(line2);
 
         List<InlineKeyboardButton> lastRow = new ArrayList<>();

@@ -4,6 +4,7 @@ package com.ivanov.AutopostingBot.utils;
 
 import com.ivanov.AutopostingBot.model.MainTag;
 import com.ivanov.AutopostingBot.model.Post;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboard;
@@ -20,6 +21,15 @@ import java.util.List;
 
 @Component
 public class MenuGenerator {
+
+    private final long ideasChannelId;
+    private final long businessChannelId;
+
+    public MenuGenerator(@Value("${channel.ideas.id}") long ideasChannelId,
+                         @Value("${channel.business.id}") long businessChannelId) {
+        this.ideasChannelId = ideasChannelId;
+        this.businessChannelId = businessChannelId;
+    }
 
     private InlineKeyboardButton getButton(String name, String callback) {
         InlineKeyboardButton button = new InlineKeyboardButton();
@@ -180,8 +190,8 @@ public class MenuGenerator {
         List<List<InlineKeyboardButton>> buttons = new ArrayList<>();
 
         List<InlineKeyboardButton> line2 = new ArrayList<>();
-        line2.add(getButton("Идеи", "CHANNEL -1002306843314"));
-        line2.add(getButton("Бизнес", "CHANNEL -1002455361234"));
+        line2.add(getButton("Идеи", "CHANNEL " + ideasChannelId));
+        line2.add(getButton("Бизнес", "CHANNEL " + businessChannelId));
         buttons.add(line2);
 
         List<InlineKeyboardButton> line3 = new ArrayList<>();

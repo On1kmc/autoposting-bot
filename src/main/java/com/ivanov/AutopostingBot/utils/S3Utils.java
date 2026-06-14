@@ -14,10 +14,13 @@ import java.io.FileInputStream;
 public class S3Utils {
 
     private final String bucket;
+    private final String s3Endpoint;
     private final S3Client s3Client;
     public S3Utils(@Value("${s3.bucket}") String bucket,
+                   @Value("${s3.endpoint}") String s3Endpoint,
                    S3Client s3Client) {
         this.bucket = bucket;
+        this.s3Endpoint = s3Endpoint;
         this.s3Client = s3Client;
     }
 
@@ -37,6 +40,6 @@ public class S3Utils {
                 .build();
 
         s3Client.putObject(putObjectRequest, RequestBody.fromBytes(bytes));
-        return "https://storage.yandexcloud.net/" + bucket + "/" + key;
+        return s3Endpoint + "/" + bucket + "/" + key;
     }
 }
